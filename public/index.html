@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Planificación de Limpieza</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background-color: #f2f2f2; }
+  </style>
+</head>
+<body>
+
+  <h1>Planificación de Limpieza</h1>
+  <p>Consulta de hoy: <span id="fecha"></span></p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Matrícula</th>
+        <th>Primer Servicio Hoy</th>
+        <th>Último Servicio Hoy</th>
+        <th>Primer Servicio Mañana</th>
+      </tr>
+    </thead>
+    <tbody id="tabla"></tbody>
+  </table>
+
+  <script>
+    const username = prompt('Usuario:');
+    const password = prompt('Contraseña:');
+
+    fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    })
+    .then(res => {
+      if (!res.ok) throw new Error('Login fallido');
+      return res.json();
+    })
+    .then(data => {
+      console.log(`Bienvenido ${data.user.name}`);
+      cargarPlanificacion();
+    })
+    .catch(err => {
+      console.error(err.message);
+      document.body.innerHTML = '<h2>Acceso denegado</h2>';
+    });
+
+    function cargarPlanificacion() {
+      const fechaHoy = new Date().toISOString().slice(0, 10);
+      document.getElementById('fecha').textContent = fechaHoy;
+
+      fetch(`/api/vehiculos?fecha=${fechaHoy}`)
+        .then(async res => {
+          if (!res.ok) {
+            const errorText = await res.text();
+            throw new Error(`Error ${res.status}: ${errorText}`);
+          }
+          return res.json();
+        })
+        .then(data => {
+          const tabla = document.getElementById('tabla');
+          tabla.innerHTML = '';
+
+          if (!Array.isArray(data)) {
+            tabla.innerHTML = `<tr><td colspan="4">Error: respuesta inesperada del servidor</td></tr>`;
+            return;
+          }
+
+          const formatHora = (hora) => {
+            if (!hora) return 'Sin servicio';
+            if (typeof hora === 'string' && /^\d{2}:\d{2}:\d{2}$/.test(hora)) return hora;
+            const d = new Date(hora);
+            return isNaN(d.getTime()) ? hora : d.toLocaleTimeString();
+          };
+
+          const formatServicio = (servicio) => {
+            if (!servicio) return 'Sin servicio';
+            const rango = `${formatHora(servicio.inicio)} - ${formatHora(servicio.fin)}`;
+            const conductor = servicio.conductor ? servicio.conductor.trim() : 'Sin conductor';
+            return `${rango} (${conductor})`;
+          };
+
+          data.forEach(row => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td>${row.matricula.trim()}</td>
+              <td>${formatServicio(row.primerServicioHoy)}</td>
+              <td>${formatServicio(row.ultimoServicioHoy)}</td>
+              <td>${formatServicio(row.primerServicioManana)}</td>
+            `;
+            tabla.appendChild(tr);
+          });
+        })
+        .catch(err => {
+          console.error('Error en fetch:', err);
+          document.getElementById('tabla').innerHTML = `<tr><td colspan="4">Error: ${err.message}</td></tr>`;
+        });
+    }
+  </script>
+
+</body>
+</html>
